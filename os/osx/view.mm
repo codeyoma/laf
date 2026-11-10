@@ -290,6 +290,21 @@ using namespace os;
       !(event.modifierFlags & NSEventModifierFlagCommand))
     g_pressedKeys[scancode] = (ev.unicodeChar() ? ev.unicodeChar() : 1);
 
+  if (g_textInput && !(event.modifierFlags & NSEventModifierFlagCommand)) {
+    // Let the input method (Korean, Japanese, Chinese, dead keys...)
+    // turn the key into text. insertText:/setMarkedText: queue the
+    // resulting characters; keys that produce no text (Enter, arrows,
+    // Backspace outside a composition) fall through as raw key events.
+    m_imeHandled = false;
+    [self interpretKeyEvents:@[event]];
+    if (m_imeHandled)
+      return;
+    if (ev.unicodeChar() < 32 || ev.unicodeChar() == 127) {
+      [self queueEvent:ev];
+      return;
+    }
+  }
+
   if (g_textInput) {
     strRef = get_unicode_from_key_code(event.keyCode, event.modifierFlags, &g_lastDeadKeyState);
     if (strRef) {
@@ -738,7 +753,135 @@ os::DragEvent newDragEvent(id<NSDraggingInfo> sender)
   if (g_textInput != newState) {
     g_textInput = newState;
     g_lastDeadKeyState = 0;
+    if (!newState) {
+      // Leaving a text field: keep what was composed as typed text.
+      [[self inputContext] discardMarkedText];
+      m_markedText = nil;
+      m_markedCount = 0;
+    }
   }
+}
+
+- (void)setTextInputCaret:(NSPoint)screenPos
+{
+  m_caretScreenPos = screenPos;
+}
+
+// Queues one KeyDown event per Unicode character of the given text.
+- (void)queueText:(NSString*)text
+{
+  NSUInteger i = 0;
+  const NSUInteger n = text.length;
+  while (i < n) {
+    unichar c = [text characterAtIndex:i++];
+    int codepoint = c;
+    if (CFStringIsSurrogateHighCharacter(c) && i < n) {
+      const unichar low = [text characterAtIndex:i];
+      if (CFStringIsSurrogateLowCharacter(low)) {
+        codepoint = CFStringGetLongCharacterForSurrogatePair(c, low);
+        ++i;
+      }
+    }
+    os::Event ev;
+    ev.setType(os::Event::KeyDown);
+    ev.setScancode(os::kKeyNil);
+    ev.setModifiers(os::kKeyNoneModifier);
+    ev.setUnicodeChar(codepoint);
+    [self queueEvent:ev];
+  }
+}
+
+// Removes the provisional (composing) characters with Backspace events.
+- (void)clearMarkedText
+{
+  for (int i = 0; i < m_markedCount; ++i) {
+    os::Event ev;
+    ev.setType(os::Event::KeyDown);
+    ev.setScancode(os::kKeyBackspace);
+    ev.setModifiers(os::kKeyNoneModifier);
+    ev.setUnicodeChar(0);
+    [self queueEvent:ev];
+  }
+  m_markedText = nil;
+  m_markedCount = 0;
+}
+
+static int count_codepoints(NSString* text)
+{
+  // Count UTF-32 characters (what queueText: sends): every UTF-16 unit
+  // except the low half of a surrogate pair.
+  int count = 0;
+  for (NSUInteger j = 0; j < text.length; ++j) {
+    if (!CFStringIsSurrogateLowCharacter([text characterAtIndex:j]))
+      ++count;
+  }
+  return count;
+}
+
+// NSTextInputClient
+
+- (void)insertText:(id)string replacementRange:(NSRange)replacementRange
+{
+  NSString* text = ([string isKindOfClass:[NSAttributedString class]] ? [string string] : string);
+  [self clearMarkedText];
+  [self queueText:text];
+  m_imeHandled = true;
+}
+
+- (void)setMarkedText:(id)string
+        selectedRange:(NSRange)selectedRange
+     replacementRange:(NSRange)replacementRange
+{
+  NSString* text = ([string isKindOfClass:[NSAttributedString class]] ? [string string] : string);
+  [self clearMarkedText];
+  [self queueText:text];
+  m_markedText = [text copy];
+  m_markedCount = count_codepoints(text);
+  m_imeHandled = true;
+}
+
+- (void)unmarkText
+{
+  // The provisional characters stay as committed text.
+  m_markedText = nil;
+  m_markedCount = 0;
+}
+
+- (BOOL)hasMarkedText
+{
+  return m_markedCount > 0;
+}
+
+- (NSRange)markedRange
+{
+  return (m_markedCount > 0 ? NSMakeRange(0, m_markedText.length) : NSMakeRange(NSNotFound, 0));
+}
+
+- (NSRange)selectedRange
+{
+  return NSMakeRange(NSNotFound, 0);
+}
+
+- (NSArray<NSAttributedStringKey>*)validAttributesForMarkedText
+{
+  return @[];
+}
+
+- (NSAttributedString*)attributedSubstringForProposedRange:(NSRange)range
+                                               actualRange:(NSRangePointer)actualRange
+{
+  return nil;
+}
+
+- (NSUInteger)characterIndexForPoint:(NSPoint)point
+{
+  return NSNotFound;
+}
+
+- (NSRect)firstRectForCharacterRange:(NSRange)range actualRange:(NSRangePointer)actualRange
+{
+  // Where the input method shows its candidate window.
+  return NSMakeRect(m_caretScreenPos.x, m_caretScreenPos.y, 1, 16);
 }
 
 - (void)queueEvent:(os::Event&)ev

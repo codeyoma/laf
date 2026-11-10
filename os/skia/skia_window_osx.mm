@@ -112,6 +112,11 @@ void SkiaWindowOSX::setTextInput(bool state, const gfx::Point& screenCaretPos)
 {
   ViewOSX* view = (ViewOSX*)m_nsWindow.contentView;
   [view setTranslateDeadKeys:(state ? YES : NO)];
+  if (state) {
+    // screenCaretPos uses a top-left origin; Cocoa screens use bottom-left.
+    const CGFloat screenH = NSMaxY([[NSScreen screens] firstObject].frame);
+    [view setTextInputCaret:NSMakePoint(screenCaretPos.x, screenH - screenCaretPos.y)];
+  }
 }
 
 void SkiaWindowOSX::onClose()

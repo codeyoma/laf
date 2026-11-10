@@ -20,8 +20,14 @@ namespace os {
 class WindowOSX;
 }
 
-@interface ViewOSX : NSView {
+@interface ViewOSX : NSView <NSTextInputClient> {
 @private
+  // Input method (IME) state: the composing text is inserted as
+  // provisional characters and replaced while the user types.
+  NSString* __strong m_markedText;
+  int m_markedCount;
+  bool m_imeHandled;
+  NSPoint m_caretScreenPos;
   NSTrackingArea* __strong m_trackingArea;
   NSCursor* __strong m_nsCursor;
   bool m_visibleMouse;
@@ -72,6 +78,7 @@ class WindowOSX;
 - (BOOL)performDragOperation:(id<NSDraggingInfo>)sender;
 - (void)doCommandBySelector:(SEL)selector;
 - (void)setTranslateDeadKeys:(BOOL)state;
+- (void)setTextInputCaret:(NSPoint)screenPos;
 - (void)queueEvent:(os::Event&)ev;
 @end
 
