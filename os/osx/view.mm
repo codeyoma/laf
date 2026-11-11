@@ -296,9 +296,17 @@ using namespace os;
     // resulting characters; keys that produce no text (Enter, arrows,
     // Backspace outside a composition) fall through as raw key events.
     m_imeHandled = false;
+    m_imeCommand = false;
     [self interpretKeyEvents:@[event]];
-    if (m_imeHandled)
+    if (m_imeHandled) {
+      // Enter while composing: the input method commits the syllable
+      // (insertText:) and then asks for the newline as a command. Send the
+      // key too, after the committed text, so Enter both commits and acts
+      // (submits a prompt) instead of needing a second press.
+      if (m_imeCommand && (ev.unicodeChar() < 32 || ev.unicodeChar() == 127))
+        [self queueEvent:ev];
       return;
+    }
     if (ev.unicodeChar() < 32 || ev.unicodeChar() == 127) {
       [self queueEvent:ev];
       return;
@@ -744,7 +752,9 @@ os::DragEvent newDragEvent(id<NSDraggingInfo> sender)
 
 - (void)doCommandBySelector:(SEL)selector
 {
-  // Do nothing (avoid beep pressing Escape key)
+  // Remember it (keyDown: sends the raw key after a commit); do nothing
+  // else (avoid beep pressing Escape key).
+  m_imeCommand = true;
 }
 
 - (void)setTranslateDeadKeys:(BOOL)state

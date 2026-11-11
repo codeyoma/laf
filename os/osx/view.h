@@ -27,6 +27,7 @@ class WindowOSX;
   NSString* __strong m_markedText;
   int m_markedCount;
   bool m_imeHandled;
+  bool m_imeCommand; // the input method asked to run a command (Enter after a commit)
   NSPoint m_caretScreenPos;
   NSTrackingArea* __strong m_trackingArea;
   NSCursor* __strong m_nsCursor;
