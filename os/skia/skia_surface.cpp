@@ -743,7 +743,17 @@ void SkiaSurface::swapBitmap(SkBitmap& other)
   ASSERT(!m_surface);
   m_bitmap.swap(other);
   delete m_canvas;
-  m_canvas = new SkCanvas(m_bitmap);
+  m_canvas = new SkCanvas(m_bitmap, SkSurfaceProps(0, m_pixelGeometry));
+}
+
+void SkiaSurface::setPixelGeometry(SkPixelGeometry geometry)
+{
+  ASSERT(!m_surface);
+  m_pixelGeometry = geometry;
+  if (!m_surface && !m_bitmap.isNull()) {
+    delete m_canvas;
+    m_canvas = new SkCanvas(m_bitmap, SkSurfaceProps(0, m_pixelGeometry));
+  }
 }
 
 // static

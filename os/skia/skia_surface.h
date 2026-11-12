@@ -21,6 +21,7 @@
 #include "include/core/SkColorType.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkSurface.h"
+#include "include/core/SkSurfaceProps.h"
 
 #include <atomic>
 
@@ -118,6 +119,12 @@ public:
 
   void swapBitmap(SkBitmap& other);
 
+  // The screen's subpixel order for text drawn on this (bitmap) surface:
+  // with one, text in a font with LCD edging gets subpixel antialiasing;
+  // kUnknown_SkPixelGeometry (the default) keeps it grayscale. Only useful
+  // on an opaque surface shown 1:1.
+  void setPixelGeometry(SkPixelGeometry geometry);
+
   static SurfaceRef loadSurface(const char* filename);
 
 private:
@@ -162,6 +169,7 @@ private:
   sk_sp<SkSurface> m_surface;
   ColorSpaceRef m_colorSpace;
   SkCanvas* m_canvas;
+  SkPixelGeometry m_pixelGeometry = kUnknown_SkPixelGeometry;
   SkPaint m_paint;
   std::atomic<int> m_lock;
 };
